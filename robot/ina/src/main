@@ -1,0 +1,89 @@
+#! /usr/bin/env python3
+import json
+import rospy
+from std_msgs.msg import String, Bool
+from inaInterface import inaInterface
+
+
+class INA:
+    def __init__(self):
+        rospy.Subscriber("line", String, self.callback, queue_size=1)
+        self.pub = rospy.Publisher("robot_consumption", String, queue_size=1)
+        self.pub_grip = rospy.Publisher("grip", Bool, queue_size=1)
+        self.readFrequencyPerMeasureTime = 40
+        self.mesureTime = 1
+        self.frequency = self.readFrequencyPerMeasureTime/self.mesureTime
+        self.rate = rospy.Rate(1)
+        self.calculate_rate = rospy.Rate(self.frequency)
+        self.m1 = 0
+        self.m2 = 0
+        self.m3 = 0
+        self.m4 = 0
+        self.grip = False
+        self.ina = inaInterface(self.readFrequencyPerMeasureTime, self.mesureTime)
+
+    def callback(self, data):
+        line = data.data
+        self.line = line.strip('\r\n')
+        if "m1" in line:
+            print(line)
+            motor_consommation_list = self.line.split(";")
+            for cons in motor_consommation_list:
+                if "m1" in cons:
+                    print("m1")
+                    self.m1 = int(cons.split(":")[1])
+                    self.ina.updateMotorVoltage(1, self.m1)
+
+                elif "m2" in cons:
+                    print("m2")
+                    self.m2 = int(cons.split(":")[1])
+                    self.ina.updateMotorVoltage(2, self.m2)
+
+                elif "m3" in cons:
+                    print("m3")
+                    self.m3 = int(cons.split(":")[1])
+                    self.ina.updateMotorVoltage(3, self.m3)
+
+                elif "m4" in cons:
+                    print("m4")
+                    self.m4 = int(cons.split(":")[1])
+                    self.ina.updateMotorVoltage(4, self.m4)
+                
+                elif "fsr" in cons:
+                    self.grip = int(cons.split(":")[1]) == 1
+                self.ina.makePowerMesurement()
+
+
+    def calculate(self):
+        for i in range(40):
+            self.ina.makePowerMesurement()
+            self.calculate_rate.sleep()
+
+    def make_dict(self):
+        d = {}
+        d["wheel1"] = self.ina.powerM1 / 1000
+        d["wheel2"] = self.ina.powerM2 / 1000
+        d["wheel3"] = self.ina.powerM3 / 1000
+        d["wheel4"] = self.ina.powerM4 / 1000
+        d["total"] = self.ina.powerMain / 1000
+        d["remainingTime"] = self.ina.getRemainingSecond()
+        d["batteryCharge"] = self.ina.startCharge - self.ina.totalCurrentUsed
+        return d
+
+    def main(self):
+        while not rospy.is_shutdown():
+            self.calculate()
+            self.ina.printResults()
+            self.pub.publish(json.dumps(self.make_dict()))
+            self.pub_grip.publish(self.grip)
+            self.rate.sleep()
+
+
+if __name__ == "__main__":
+    try:
+        rospy.init_node("ina", anonymous=True)
+        ina = INA()
+        ina.main()
+    except rospy.ROSInterruptException:
+        pass
+

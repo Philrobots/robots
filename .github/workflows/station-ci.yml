@@ -1,0 +1,29 @@
+name: Station CI
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'station/**'
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'station/**'
+
+defaults:
+  run:
+    working-directory: station
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build docker image
+        run: docker build -t station .
+      - name: Lint application
+        run: docker run station pylint src
+      - name: Test application
+        run: docker run station pytest

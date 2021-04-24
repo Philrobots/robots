@@ -1,0 +1,6 @@
+<launch>
+  <include file="$(find red_light_driver)/launch/light.launch"/>
+  <include file="$(find ina)/launch/ina.launch"/>
+  <include file="$(find letter_reading)/launch/reading.launch"/>
+  <node pkg="motor_driver" name="motor_driver" type="main" output="screen"/>
+</launch>

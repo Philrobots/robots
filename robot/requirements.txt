@@ -1,0 +1,6 @@
+scikit-build >= 0.11.1
+opencv-python >= 4.5.1.48
+pylint >= 2.6.0
+pytest >= 6.2.2
+pytest_mock >= 3.5.1
+pytesseract >= 0.3.7

@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+
+import rospy
+from std_msgs.msg import String, Bool
+from geometry_msgs.msg import PoseStamped
+
+from commands.chain_of_commands_factory import ChainOfCommandsFactory
+from commands.command_builder import CommandBuilder
+from commands.cycle_steps import cycle_steps
+
+
+def create_chain_of_commands():
+
+
+    return CommandBuilder().with_steps(cycle_steps*3).build_many()
+
+
+
+def initialize_handled_data():
+    return {
+        "puck_colors": ["purple", "orange", "yellow"],
+        "corners": ["D", "A", "B"],
+        "resistance": 270000,
+        "movement_vectors_string_pub": rospy.Publisher('movement_vectors_string', String, queue_size=1),
+        "goal_pub": rospy.Publisher('move_base_simple/goal', PoseStamped, queue_size=1),
+        "calculate_pucks_pub": rospy.Publisher("calculate_pucks", Bool, queue_size=1),
+        "read_letters_pub": rospy.Publisher("read_letters", Bool, queue_size=1),
+        "path_following_mode_pub": rospy.Publisher("following_mode", String, queue_size=1),
+        "puck_colors_pub": rospy.Publisher("puck_colors", String, queue_size=1),
+        "red_light_pub": rospy.Publisher("red_light", Bool, queue_size=1),
+        "current_step_pub": rospy.Publisher("current_step", String, queue_size=1),
+        "RESISTANCE_STATION": (170, 755),
+        "COMMAND_PANEL": (1200, 430),
+        "convertion_to_cm": 6.882391855,
+        # "resistance_y_dist": 15,
+        # "resistance_x_dist": 15
+    }
+
+
+def controller():
+    commands = create_chain_of_commands()
+    handled_data = initialize_handled_data()
+    rospy.Rate(0.2).sleep()
+    for command in commands:
+        handled_data = command.execute(handled_data)
+
+
+if __name__ == '__main__':
+    try:
+        rospy.init_node('controller', anonymous=True)
+        controller()
+    except rospy.ROSInterruptException:
+        pass

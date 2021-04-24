@@ -1,0 +1,91 @@
+name: Coverage
+
+on:
+  workflow_run:
+    workflows:
+      - "Scripts CI"
+      - "Robot CI"
+      - "Station CI"
+      - "Frontend CI"
+    types:
+      - completed
+    branches:
+      - develop
+
+jobs:
+  cover-scripts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scripts
+    strategy:
+      matrix:
+        node-version: [ 15.x ]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build docker image
+        run: docker build -t scripts .
+      - name: Run tests with coverage
+        run: docker run -i -v $PWD:/output scripts pytest --cov=./ --cov-report xml:/output/coverage.xml
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+  cover-robot:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: station
+    strategy:
+      matrix:
+        node-version: [ 15.x ]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build docker image
+        run: docker build -t robot .
+      - name: Run tests with coverage
+        run: docker run -i -v $PWD:/output robot pytest --cov=./ --cov-report xml:/output/coverage.xml
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+  cover-station:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: station
+    strategy:
+      matrix:
+        node-version: [ 15.x ]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build docker image
+        run: docker build -t station .
+      - name: Run tests with coverage
+        run: docker run -i -v $PWD:/output station pytest --cov=./ --cov-report xml:/output/coverage.xml
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+  cover-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    strategy:
+      matrix:
+        node-version: [ 15.x ]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: yarn install
+      - name: Run tests with coverage
+        run: yarn test --coverage
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

@@ -1,0 +1,33 @@
+[MASTER]
+disable=
+    C0103, # invalid-name
+    C0114, # missing-module-docstring
+    C0115, # missing-class-docstring
+    C0116, # missing-function-docstring
+    E0401, # import-error
+    E1101, # no-member
+    R0801, # duplicate-code
+    R0903, # too-few-public-methods
+    R0902, # too-many-instance-attributes
+    R0904, # too-many-public-methods
+    R0913, # too-many-arguments
+    R0903, # too-few-public-methods
+    R0915, # too-many-statements
+    W0511, # fixme
+    W0201, # attribute-defined-outside-init
+    R0201, # no-self-use
+    E0401, # import-error
+    R1705, # no-else-return
+    W0612, # unused-variable
+    R1729, # use-a-generator
+    R0914, # too-many-locals
+    E1136, # unsubscriptable-object
+    E1126, # invalid-sequence-index
+    C0301, # line-too-long
+
+
+ignore=
+    Dockerfile,
+    README.md,
+    requirements.txt,
+    pytest.ini,

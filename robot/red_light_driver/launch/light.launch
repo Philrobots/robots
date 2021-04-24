@@ -1,0 +1,3 @@
+<launch>
+	<node pkg="red_light_driver" name="red_light_driver" type="main" output="screen"/>
+</launch>

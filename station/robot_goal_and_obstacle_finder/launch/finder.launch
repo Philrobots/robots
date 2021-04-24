@@ -1,0 +1,3 @@
+<launch>
+  <node name="robot_goal_and_obstacle_finder" pkg="robot_goal_and_obstacle_finder" type="main" output="screen"/>
+</launch>

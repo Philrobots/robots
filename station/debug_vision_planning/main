@@ -1,0 +1,127 @@
+#!/usr/bin/env python
+from __future__ import division
+import rospy
+import json
+import numpy as np
+from std_msgs.msg import String
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped, Pose, PoseArray, Quaternion
+import tf
+
+
+
+class DebugVisionPlanning:
+    def __init__(self):
+
+        self.robot_publisher_debug = rospy.Publisher('robot_debug', PoseStamped, queue_size=10)
+        self.pucks_publisher_debug = rospy.Publisher('pucks_debug', PoseArray, queue_size=10)
+        self.obstacles_publisher_debug = rospy.Publisher('obstacles_debug', PoseArray, queue_size=10)
+        self.square_publisher_debug = rospy.Publisher('square_debug', PoseArray, queue_size=10)
+        self.path_publisher_debug = rospy.Publisher('path_debug',Path, queue_size=10)
+        self.converting_factor = 400
+        sauce = tf.transformations.quaternion_from_euler(0, 3*np.pi/2, 0, 'szyx')
+        self.upwards = Quaternion(*sauce) 
+        rospy.Subscriber('pucks', String, self.callback_pucks)
+        rospy.Subscriber('obstacles', String, self.callback_obstacles)
+        rospy.Subscriber('robot', String, self.callback_robot)
+        rospy.Subscriber('square', String, self.callback_square)
+        rospy.Subscriber('path', Path, self.callback_path)
+
+    def callback_path(self, path):
+        new_path = Path()
+        new_path.header.frame_id = "map"
+        poses = path.poses
+        for old_pose in poses:
+            pose = PoseStamped()
+            pose.pose.position.x = old_pose.pose.position.x / self.converting_factor
+            pose.pose.position.y = -1 * (old_pose.pose.position.y / self.converting_factor)
+            pose.pose.position.z = 0
+            pose.header.frame_id = "map"
+            new_path.poses.append(pose)
+
+        self.path_publisher_debug.publish(new_path)
+
+
+    def callback_pucks(self, pucks):
+        pucks_dict = json.loads(pucks.data)
+    
+        pucks = PoseArray()
+        pucks_list = []
+        for color, value in pucks_dict.items():
+            for position_object in value:
+                pose = Pose()
+                pose.position.x = position_object["center_position"][0] / self.converting_factor
+                pose.position.y = -1 * (position_object["center_position"][1] / self.converting_factor)
+                pose.orientation = self.upwards
+                pucks_list.append(pose)
+
+        pucks.poses = pucks_list
+        pucks.header.frame_id = "map"
+        self.pucks_publisher_debug.publish(pucks)
+
+    """"{'green': [{'center_position': (1510, 274), 'radius': (1510, 274)}], 'yellow': [{'center_position':\
+  \ (887, 145), 'radius': (887, 145)}], 'brown': [{'center_position': (1473, 688),\
+  \ 'radius': (1473, 688)}], 'blue': [{'center_position': (819, 143), 'radius': (819,\
+  \ 143)}, {'center_position': (1294, 706), 'radius': (1294, 706)}], 'orange': [{'center_position':\
+  \ (314, 706), 'radius': (314, 706)}], 'None': [{'center_position': (1485, 553),\
+  \ 'radius': (1485, 553)}, {'center_position': (1372, 428), 'radius': (1372, 428)},\
+  \ {'center_position': (55, 233), 'radius': (55, 233)}], 'white': [{'center_position':\
+  \ (1235, 142), 'radius': (1235, 142)}], 'purple': [{'center_position': (1024, 143),\
+  \ 'radius': (1024, 143)}]}"""
+
+    def callback_obstacles(self, obstacles):
+        obstacle_list = json.loads(str(obstacles.data))
+        obstacles = PoseArray()
+        obstacle_list_poses = []
+        for position_object in obstacle_list:
+            pose = Pose()
+            pose.position.x = position_object["center_of_obstacle"][0] / self.converting_factor
+            pose.position.y = -1 * (position_object["center_of_obstacle"][1] / self.converting_factor)
+            pose.orientation = self.upwards
+            obstacle_list_poses.append(pose)
+
+        obstacles.poses = obstacle_list_poses
+        obstacles.header.frame_id = "map"
+        self.obstacles_publisher_debug.publish(obstacles)
+
+    """[{'center_of_obstacle': (1227, 420), 'radius': 42}, {'center_of_obstacle': (240,\
+  \ 650), 'radius': 42}]""" 
+
+    def callback_robot(self, robot):
+        robot_dict = json.loads(str(robot.data))
+        robot = PoseStamped()
+        robot.pose.position.x = robot_dict["robot"][0] / self.converting_factor
+        robot.pose.position.y = -1 * (robot_dict["robot"][1] / self.converting_factor)
+        robot.pose.orientation = self.upwards
+        robot.header.frame_id = "map"
+        self.robot_publisher_debug.publish(robot)
+
+    """ {'robot': (763, 444), 'prehenseur': (651, 449), 'angle': 3.1930934645410183}"""
+
+    def callback_square(self, square):
+        square_dict = json.loads(str(square.data))
+        square = PoseArray()
+        square_list = []
+        for position in square_dict.values():
+            pose = Pose()
+            pose.position.x = position[0] / self.converting_factor
+            pose.position.y = -1 * (position[1] / self.converting_factor)
+            pose.orientation = self.upwards
+            square_list.append(pose)
+
+        square.poses = square_list
+        square.header.frame_id = "map"
+        self.square_publisher_debug.publish(square)
+    """ "{"corner_A": [621, 194], "corner_B": [621, 733],"corner_C": [80, 733], "corner_D": [80, 194]}" """
+
+
+
+
+if __name__ == '__main__':
+    try:
+        rospy.init_node('debug_vision_planning', anonymous=True)
+
+        DebugVisionPlanning()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass

@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="path_following" name="path_following" type="main" output="screen"/>
+</launch>

@@ -1,0 +1,11 @@
+codecov >= 2.1.11
+opencv-python >= 4.5.1.48
+pylint >= 2.6.0
+pytest >= 6.2.2
+pytest-cov >= 2.11.1
+pytesseract >= 0.3.7
+pyzbar >= 0.1.8
+opencv-contrib-python >= 4.3.0.38
+scikit-learn >=0.22
+sklearn
+pi-ina219 >= 1.4.0

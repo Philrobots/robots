@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+import json
+
+import cv2
+import numpy as np
+import rospy
+from sensor_msgs.msg import Image
+from std_msgs.msg import String, Bool
+
+from detection.acuro_markers.obstacle_and_robot_finder import \
+    ObstacleRobotFinder
+from detection.puck_detection import PuckDetection
+from detection.hard_code_position.square_corner_detection import \
+    SquareCornerDetection
+
+
+class RobotGoalAndObstacleFinder:
+    def __init__(self):
+        self.robot_publisher = rospy.Publisher('robot', String, queue_size=1)
+        self.pucks_publisher = rospy.Publisher('pucks', String, queue_size=1)
+        self.obstacles_publisher = rospy.Publisher('obstacles', String, queue_size=1)
+        self.square_publisher = rospy.Publisher('square', String, queue_size=1)
+        rospy.Subscriber('world_cam/image_raw', Image, self.detect, queue_size=1, buff_size=52428800)
+        rospy.Subscriber('calculate_pucks', Bool, self.callback_calculate_puck, queue_size=1)
+        self.calculate_pucks = True
+        self.square = ""
+        self.obstacles = ""
+        self.robot_and_obstacle_finder = ObstacleRobotFinder()
+        self.puck_finder = PuckDetection()
+        self.square_corner_detection = SquareCornerDetection()
+
+    def find_pucks(self, image):
+        return self.puck_finder.detect_pucks(image)
+
+    def callback_calculate_puck(self, data):
+        rospy.logerr("RECALCULATING PUCKS")
+        self.calculate_pucks = True
+
+    def find_robot_and_angle(self, image):
+        center_of_bottom_robot, prehenseur_position, angle_robot = self.robot_and_obstacle_finder.detect_robot(image)
+        aruco_position = {"robot": center_of_bottom_robot, "prehenseur": prehenseur_position, "angle": angle_robot}
+        return aruco_position
+
+    def find_obstacles(self, image):
+        return self.robot_and_obstacle_finder.detect_obstacle_position(image)
+
+    def find_square(self, image):
+        return self.square_corner_detection.detect_square_position(image)
+
+    def convert(self, o):
+        if isinstance(o, (np.int16, np.int8, np.int64, np.int32)): return int(o)
+        raise TypeError
+
+    def detect(self, image_data):
+        cv2_array = np.frombuffer(image_data.data, dtype=np.uint8).reshape(image_data.height, image_data.width, -1)
+        cv2_array = cv2.cvtColor(cv2_array, cv2.COLOR_RGB2BGR)
+
+        self.robot_publisher.publish(json.dumps(self.find_robot_and_angle(cv2_array), default=self.convert))
+        self.obstacles = json.dumps(self.find_obstacles(cv2_array), default=self.convert)
+        self.obstacles_publisher.publish(self.obstacles)
+        self.square = json.dumps(self.find_square(cv2_array), default=self.convert)
+        self.square_publisher.publish(self.square)
+        if self.calculate_pucks:
+            rospy.logerr("RECALCULATING PUCKS LIVE")
+            self.pucks = json.dumps(self.find_pucks(cv2_array), default=self.convert)
+            rospy.logerr("RECALCULATING PUCKS FINISHED")
+            self.calculate_pucks = False
+        self.pucks_publisher.publish(self.pucks)
+
+
+if __name__ == '__main__':
+    try:
+        rospy.init_node('robot_goal_and_obstacle_finder', anonymous=True)
+        RobotGoalAndObstacleFinder()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass

@@ -1,0 +1,29 @@
+name: Scripts CI
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'scripts/**'
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - 'scripts/**'
+
+defaults:
+  run:
+    working-directory: scripts
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build docker image
+        run: docker build -t scripts .
+      - name: Lint application
+        run: docker run scripts pylint *
+      - name: Test application
+        run: docker run scripts pytest

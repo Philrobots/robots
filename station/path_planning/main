@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+import json
+import math
+
+import rospy
+from geometry_msgs.msg import Pose, PoseArray, PoseStamped
+from nav_msgs.msg import Path
+from std_msgs.msg import String, Bool
+
+from pathfinding.pathfinding_algorithms import PathfindingAlgorithms
+from pathfinding.pathfinding_algorithm_factory import PathfindingAlgorithmFactory
+from pathfinding.map import Map
+from pathfinding.pathfinder import Pathfinder
+from pathfinding.path_not_found_exception import PathNotFoundException
+from pathfinding.config import NODE_SIZE, SAFETY_CUSHION, OBSTACLE_WIDTH, PUCK_WIDTH
+from pathfinding.tile_role import TileRole
+from robot_directions import RobotDirections
+
+
+class PathFinder:
+    def __init__(self):
+        self.goal = None
+        self.pucks = None
+        self.obstacles = None
+        self.robot = None
+        self.grip = None
+        self.angle = None
+        self.fsr = None
+        self.node_size = NODE_SIZE
+        self.algorithm = PathfindingAlgorithms.BREADTH_FIRST_SEARCH
+        self.image_width, self.image_height = (1600, 904)
+        self.cm_to_pixel = 6.882391855
+        self.rate = rospy.Rate(1)
+
+        self.pub = rospy.Publisher('path', Path, queue_size=1)
+        self.pub_string = rospy.Publisher('path_string', String, queue_size=1)
+        self.pub_vector = rospy.Publisher('movement_vectors_string', String, queue_size=1)
+
+        rospy.Subscriber('move_base_simple/goal', PoseStamped, self.callback_goal)
+        rospy.Subscriber('pucks', String, self.callback_pucks)
+        rospy.Subscriber('obstacles', String, self.callback_obstacles)
+        rospy.Subscriber('robot', String, self.callback_robot)
+
+    def can_create_path(self):
+        return self.goal and self.pucks and self.obstacles and self.robot
+
+    def distance(self, point1, point2):
+        x1, y1 = point1
+        x2, y2 = point2
+        return math.sqrt(pow(x2-x1, 2) + pow(y2-y1, 2))
+
+    def get_path(self):
+        found_path = False
+        while not found_path:
+            if self.can_create_path():
+                pucks = [puck for puck in self.pucks if puck[0] != self.goal[0] and puck[1] != self.goal[1]]
+                is_puck_in_grip = self.calculate_if_puck_is_in_grip()
+                if is_puck_in_grip:
+                    puck_distances = [self.distance(puck, self.grip) for puck in pucks]
+                    min_index = puck_distances.index(min(puck_distances))
+                    pucks = [puck for i, puck in enumerate(pucks) if i != min_index]
+
+                nodes = self.calculate_path(pucks)
+                path = Path()
+                arr = []
+                for node in nodes:
+                    arr.append(tuple(node.pixel_coordinates_center))
+                    pose = PoseStamped()
+                    pose.pose.position.x = node.pixel_coordinates_center[0]
+                    pose.pose.position.y = node.pixel_coordinates_center[1]
+                    pose.pose.position.z = 0
+                    pose.header.frame_id = "/map"
+                    path.poses.append(pose)
+                    path.header.frame_id = "/map"
+
+                self.pub_string.publish(str(arr))
+                self.pub.publish(path)
+                found_path = True
+            else:
+                rospy.logerr("A parameter was still set to None (goal, pucks, obstacles, robot)")
+                continue
+
+    def calculate_path(self, pucks):
+        safety_cushion = SAFETY_CUSHION
+        puck_width = PUCK_WIDTH
+        obstacle_width = OBSTACLE_WIDTH
+
+        found_path = False
+        while not found_path:
+            pathfinding_algorithm_factory = PathfindingAlgorithmFactory()
+            pathfinding_algorithm = pathfinding_algorithm_factory.create(self.algorithm)
+            board_map = Map(self.image_width, self.image_height, self.obstacles, pucks, self.robot, self.goal,
+                            node_size=self.node_size,
+                            safety_cushion=safety_cushion, puck_width=puck_width,
+                            obstacle_width=obstacle_width)
+            board_map.render_map()
+            pathfinder = Pathfinder(board_map, pathfinding_algorithm)
+
+            try:
+                pathfinder.find_square_matrix_path()
+                found_path = True
+            except PathNotFoundException:
+                rospy.logerr("path not found")
+                if puck_width == 0 and obstacle_width == 0:
+                    rospy.logerr("path not found meme avec puck et obstacle a 0")
+                    rospy.logerr("checker walls et wall_width??")
+
+                if self.robot_is_in_obstacle(board_map):
+                    # the robot sees itself in an obstacle
+                    self.move_robot_to_safe_and_empty_space(pathfinder)
+                    rospy.logerr("move robot to empty space")
+
+                elif self.goal_is_in_puck(board_map):
+                    # two pucks are overlapping over the goal
+                    puck_width = max(0, puck_width - self.node_size)
+                    rospy.logerr("goal is in puck")
+
+                elif self.goal_is_in_obstacle(board_map):
+                    obstacle_width = max(0, obstacle_width - self.node_size)
+                    rospy.logerr("goal is in obstacle")
+
+                else:
+                    # there is something blocking the robot from the goal.
+                    # there are probably two obstacles overlapping
+                    obstacle_width = max(0, obstacle_width - self.node_size)
+
+        return pathfinder.path
+
+    def move_robot_to_safe_and_empty_space(self, pathfinder):
+        path_to_empty_space = pathfinder.find_path_to_empty_space()
+        goal = path_to_empty_space[-1]
+
+        angle = self.get_angle_between_two_points(*self.robot, *goal.pixel_coordinates_center)
+
+        sins_and_cosines = {
+            mode: (math.sin(mode.value + self.angle), math.cos(mode.value + self.angle))
+            for mode in RobotDirections
+        }
+
+        sin = math.sin(angle)
+        cos = math.cos(angle)
+
+        differences = {
+            mode: abs(val[0] - sin) + abs(val[1] - cos)
+            for mode, val in sins_and_cosines.items()
+        }
+
+        min_mode = min(differences, key=differences.get)
+        min_mode_angle = min_mode.value + self.angle
+
+        angle_correction = self.get_angle_correction(min_mode_angle, angle)
+        length = self.distance(self.robot, goal.pixel_coordinates_center) + 15# length + 15 pour s'assurer qu'il sort vraiment dans une case vide?
+
+        published_vector = (length/self.cm_to_pixel, math.degrees(angle_correction), min_mode.value)
+        self.pub_vector.publish(json.dumps(published_vector))
+        self.rate.sleep()
+
+    def get_angle_between_two_points(self, x1, y1, x2, y2):
+        angle = -math.atan2(y2 - y1, x2 - x1)
+
+        if angle == -0:
+            angle = 0
+        elif angle == -math.pi:
+            angle = math.pi
+        return angle
+
+    def get_angle_correction(self, angle1, angle2):
+        if angle1 < 0:
+            angle1 = 2 * math.pi + angle1
+        if angle2 < 0:
+            angle2 = 2 * math.pi + angle2
+
+        angle_correction = angle2 - angle1
+
+        if angle_correction > math.pi:
+            angle_correction -= 2 * math.pi
+        elif angle_correction < -math.pi:
+            angle_correction += 2 * math.pi
+        return angle_correction
+
+    def robot_is_in_obstacle(self, _map):
+        return _map.get_node_from_pixel(self.robot).role is TileRole.OBSTACLE
+
+    def goal_is_in_puck(self, _map):
+        return _map.get_node_from_pixel(self.goal).role is TileRole.PUCK
+
+    def goal_is_in_obstacle(self, _map):
+        return _map.get_node_from_pixel(self.goal).role is TileRole.OBSTACLE
+
+    def callback_goal(self, goal):
+        self.goal = (int(goal.pose.position.x), int(goal.pose.position.y))
+        rospy.logerr("sauce")
+        print(self.goal)
+        self.get_path()
+
+    # def callback_pucks(self, pucks):
+    #     self.pucks = [(int(puck.position.x), int(puck.position.y)) for puck in pucks.poses]
+
+    # def callback_obstacles(self, obstacles):
+    #     self.obstacles = [(int(obstacle.position.x), int(obstacle.position.y)) for obstacle in obstacles.poses]
+
+    # def callback_robot(self, robot):
+    #     self.robot = (int(robot.position.x), int(robot.position.y))
+
+    def callback_pucks(self, pucks):
+        pucks_dict = json.loads(str(pucks.data))
+    
+        self.pucks = []
+        for color, value in pucks_dict.items():
+            for position in value:
+                self.pucks.append(position["center_position"])
+
+    """"{'green': [{'center_position': (1510, 274), 'radius': (1510, 274)}], 'yellow': [{'center_position':\
+  \ (887, 145), 'radius': (887, 145)}], 'brown': [{'center_position': (1473, 688),\
+  \ 'radius': (1473, 688)}], 'blue': [{'center_position': (819, 143), 'radius': (819,\
+  \ 143)}, {'center_position': (1294, 706), 'radius': (1294, 706)}], 'orange': [{'center_position':\
+  \ (314, 706), 'radius': (314, 706)}], 'None': [{'center_position': (1485, 553),\
+  \ 'radius': (1485, 553)}, {'center_position': (1372, 428), 'radius': (1372, 428)},\
+  \ {'center_position': (55, 233), 'radius': (55, 233)}], 'white': [{'center_position':\
+  \ (1235, 142), 'radius': (1235, 142)}], 'purple': [{'center_position': (1024, 143),\
+  \ 'radius': (1024, 143)}]}"""
+
+    def callback_obstacles(self, obstacles):
+        obstacle_list = json.loads(str(obstacles.data))
+        self.obstacles = []
+        for position in obstacle_list:
+            self.obstacles.append(position["center_of_obstacle"])
+
+    """[{'center_of_obstacle': (1227, 420), 'radius': 42}, {'center_of_obstacle': (240,\
+  \ 650), 'radius': 42}]""" 
+
+    def callback_robot(self, robot):
+        robot_dict = json.loads(str(robot.data))
+        self.robot = robot_dict["robot"]
+        self.grip = robot_dict['prehenseur']
+        self.angle = robot_dict["angle"]
+
+    """ {'robot': (763, 444), 'prehenseur': (651, 449), 'angle': 3.1930934645410183}"""
+
+    def calculate_if_puck_is_in_grip(self):
+        return_value = False
+        for i in self.pucks:
+            if self.distance(self.grip, i) <= 70:
+                return_value = True
+                break
+
+        return return_value
+
+
+def path_planner():
+    rospy.init_node('path_planning', anonymous=True)
+
+    pathfinder = PathFinder()
+
+    rate = rospy.Rate(10)  # 10hz
+
+    while not rospy.is_shutdown():
+        rate.sleep()
+
+
+if __name__ == '__main__':
+    try:
+        path_planner()
+    except rospy.ROSInterruptException:
+        pass

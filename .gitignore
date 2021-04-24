@@ -1,0 +1,10 @@
+.idea
+*.pytest_cache
+*__pycache__
+node_modules
+*.pyc
+*.DS_Store
+**/build/*
+**/devel/*
+.catkin_workspace
+*.bag

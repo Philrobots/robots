@@ -1,0 +1,58 @@
+version: '3.8'
+
+networks:
+  ros:
+    ipam:
+      config:
+        - subnet: 172.18.1.0/24
+
+services:
+  robot:
+    restart: unless-stopped
+    build: ./robot
+    volumes:
+      - ./robot:/root/catkin_ws/src
+    tty: true
+    stdin_open: true
+    networks:
+      ros:
+        ipv4_address: 172.18.1.4
+    environment:
+      - "ROS_MASTER_URI=http://station:11311"
+      - "ROS_HOSTNAME=robot"
+    extra_hosts:
+      station: 172.18.1.2
+      robot: 172.18.1.4
+  station:
+    restart: unless-stopped
+    build: ./station
+    volumes:
+      - ./station:/root/catkin_ws/src
+    links:
+      - robot
+    ports:
+      - 4000:4000
+    tty: true
+    networks:
+      ros:
+        ipv4_address: 172.18.1.2
+    environment:
+      - "ROS_MASTER_URI=http://station:11311"
+      - "ROS_HOSTNAME=station"
+    extra_hosts:
+      station: 172.18.1.2
+      robot: 172.18.1.4
+  frontend:
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env
+    build: ./frontend
+    ports:
+      - 5000:5000
+    volumes:
+      - ./frontend:/usr/src/app
+    tty: true
+    networks:
+      ros:
+        ipv4_address: 172.18.1.6
+    stdin_open: true

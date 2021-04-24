@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="websockets" name="websockets" type="main" output="screen"/>
+</launch>

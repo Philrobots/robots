@@ -1,0 +1,3 @@
+<launch>
+	<node pkg="letter_reading" name="letter_reading" type="main" output="screen"/>
+</launch>

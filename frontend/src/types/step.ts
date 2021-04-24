@@ -1,0 +1,17 @@
+export enum Step {
+  CycleNotStarted,
+  CycleReadyInWaitingMode,
+  CycleStarted,
+  ToResistanceStation,
+  ReadResistance,
+  ToControlPanel,
+  ReadControlPanel,
+  ToFirstPuckAndGrabFirstPuck,
+  ToFirstCornerAndReleaseFirstPuck,
+  ToSecondPuckAndGrabSecondPuck,
+  ToSecondCornerAndReleaseSecondPuck,
+  ToThirdPuckAndGrabThirdPuck,
+  ToThirdCornerAndReleaseThirdPuck,
+  ToSquareCenter,
+  CycleEndedAndRedLedOn,
+}

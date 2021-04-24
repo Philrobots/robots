@@ -1,0 +1,9 @@
+<launch>
+<!--     <include file="$(find websockets)/launch/websocket.launch" /> -->
+    <include file="$(find world_camera_driver)/launch/camera.launch" />
+    <include file="$(find robot_goal_and_obstacle_finder)/launch/finder.launch" />
+    <include file="$(find path_planning)/launch/planning.launch" />
+    <include file="$(find debug_vision_planning)/launch/debug.launch" />
+    <include file="$(find path_following)/launch/following.launch" />
+    <node name="controller" pkg="controller" type="main" output="screen"/>
+</launch>

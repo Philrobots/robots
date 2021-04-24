@@ -1,0 +1,14 @@
+[MASTER]
+disable=
+    C0114, # missing-module-docstring
+    C0115, # missing-class-docstring
+    C0116, # missing-function-docstring
+    E0401, # import-error
+    E1101, # no-member
+    R0903, # too-few-public-methods
+    R0902, # too many instance attributes
+    W0511, # fixme
+    C0103, # snake case
+    C0301, # line too long
+    W0702, 
+    W0703, # catching general exception
